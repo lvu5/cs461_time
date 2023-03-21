@@ -16,4 +16,5 @@ kobjs-x86_64/src/startKernel.o: src/startKernel.c include/nano//common.h \
  include/nano/version.h include/nano/xenGrant.h \
  include/nano/initialStore.h include/nano/xenbus.h include/nano/timer.h \
  include/nano/common.h include/nano/xenSchedule.h include/nano/blkfront.h \
- include/nano/arg.h
+ include/nano/arg.h include/nano/archPageTable.h \
+ include/nano/x86_64/archPageTable.h

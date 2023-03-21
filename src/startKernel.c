@@ -46,7 +46,7 @@
 
 #include <nano/console.h>
 #include <xen/io/console.h>
-
+#include <nano/archPageTable.h>
 
 u8 xen_features[XENFEAT_NR_SUBMAPS * 32];
 
@@ -74,15 +74,15 @@ extern char temp[100];
 extern int k;
 // create function pointer point to timeOneShotSet(int64 time)
 
-// struct timer_lst {
-//     void (*timeOneShotSet)(int64 time);
-//     char *message;
-// };
+struct timer_lst {
+    void (*timeOneShotSet)(int64 time);
+    char *message;
+    int index;
+    int is_set;
+};
 //______________________________________________________________________________
 /// reports back xen features that ethos may need to know about
 //______________________________________________________________________________
-
-
 
 void setupXenFeatures(void) {
     xen_feature_info_t fi;
@@ -98,7 +98,6 @@ void setupXenFeatures(void) {
 		xen_features[i*32+j] = !!(fi.submap & 1<<j);
 	}
 }
-
 
 void
 startKernel(start_info_t *si)
@@ -164,99 +163,21 @@ startKernel(start_info_t *si)
     // xenEventBind(console_event, handle_input, NULL);
     
     // xencons_resume();
+    
 
 
     setupXenFeatures();
-    
-    // uint32_t console_event = si->console.domU.evtchn;
     consoleInit();
     timeInit();
+    pfn_t startPfn = PFN_UP(virtualToPhysical(start_info.pt_base)) + start_info.nr_pt_frames;
+    pfn_t maxMappedPfn = (KERN_END - KERN_START) >> PAGE_SHIFT;
+    pfn_t maxPfn = start_info.nr_pages;
+    archPageTablePopulate(&startPfn, &maxMappedPfn, &maxPfn);
+    archPageTableWalk(si->pt_base);
     // create an array of timer_lst
     // struct timer_lst timer_list[10];
-    // int current_timer = 0;
-    // int index = 0;
-    // int last = 0;
-    bool printed = false;
-    while(1) {
-        __cli();
-        if (temp[0] == '\0') { 
-                if (!printed){
-                    printfLog(
-                        "\n\nHello World! Some commands\n"
-                        "st p Set a timer to go off in p seconds. p should be a decimal integer. Multiple timers can be"
-                        "active at any give time.\n");
-                    printfLog(
-                        "sm s Set the message to be printed when a timer goes off. The string s may contain any printable"
-                        "character and is ended by the new line. The string may or may not be enclosed in quotes.\n");
-                    printfLog("ct Cancel the last timer\n");
-                    printfLog("sd Shutdown the kernel.\n\n");
-                    printfLog("$cs461> ");
-                    printed = true;
-                }
-            HYPERVISOR_sched_op(SCHEDOP_block, 0);
-        }
-        else
-        if (temp[k-1] == '\r') { // remove \r
-            temp[k-1] = '\0';
-            if (temp[0] == 's')
-                if (temp[1] == 't'){
-                    // get digits from temp[3] to temp[k-1], check if it is a number
-                    int64 i = 0;
-                    int j = 3;
-                    while (j < k-1){
-                        if (temp[j] < '0' || temp[j] > '9'){
-                            printfLog("Invalid input\n");
-                            break;
-                        }
-                        i = i*10 + (temp[j] - '0');
-                        j++;
-                    }
-                    i = i * 1000000000;
-                    if (message[0] == '\0'){
-                        printfLog("Timer set for %ld second(s)\n", i / 1000000000);
-                    }
-                    else {
-                        printfLog("Timer set for %ld second(s) with message: %s\n", i / 1000000000, message);
-                    }
-                    // if (message == NULL)
-                    // {
-                    //     strcat(message, "Timer expired");
-                    //     timer_list[index].message = message;
-                    //     timer_list[index].timeOneShotSet = i;
-                    // }
-                    timeOneShotSet(i);
-                }
-            if (temp[0] == 's')
-                if (temp[1] == 'm') {
-                    // get string from temp[3] to temp[k-1]
-                        int j = 3;
-                        while (j < k-1){
-                            message[j-3] = temp[j];
-                            j++;
-                        }
-                        message[j-3] = '\0';
-                        printfLog("Message set to: %s\n", message);
-                        set_message(message);
-                }
-            if (temp[0] == 'c')
-                if (temp[1] == 't'){
-                    // cancel timer
-                    printfLog("Timer cancelled\n");
-                    HYPERVISOR_set_timer_op(0);
-                }
-            if (my_strcmp(temp, "sd") == 0) {
-                xenScheduleShutdown(0);
-            }
-            printed = false;
-            temp[0] = '\0';
-            k = 0;
-        }
 
-        __sti();
-        HYPERVISOR_sched_op(SCHEDOP_block, 0);
-        
-    }
-    //kernelArgPrint();
+    // kernelArgPrint();
     xenScheduleShutdown(0);
     // your code goes here!
     // init();
